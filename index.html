@@ -4,7 +4,7 @@
       <div class="logoBox">K</div>
       <div>
         <div class="storeName" id="storeNameEl">KasirKu</div>
-        <div class="storeSub"><span id="clockEl">15:45 • 8 Okt</span> • Offline • v2.0</div>
+        <div class="storeSub"><span id="clockEl">16:55 • 8 Okt</span> • Offline • v2.0</div>
       </div>
       <div class="topActions">
         <button class="iconBtn" id="themeBtn" title="Mode gelap/terang">🌙</button>
@@ -419,6 +419,8 @@
   }
 </style><script>
 (function(){
+  if(!String.prototype.padStart){ String.prototype.padStart=function(t,p){ t=Math.floor(t)||0; if(this.length>=t)return String(this); p=String(p==null?" ":p); var s=""; while(s.length<t-this.length)s+=p; return s.slice(0,t-this.length)+String(this); }; }
+  if(!Array.from){ Array.from=function(o){ return Array.prototype.slice.call(o); }; }
   var LS2 = "kasirku_data_v2", LS1 = "kasirku_data_v1";
   var state = null;
   var payMethod = "Tunai", payMode = "lunas";
@@ -767,26 +769,35 @@
     out.set(head,0); out.set(enc,head.length); out.set(feed,head.length+enc.length); out.set(cut,head.length+enc.length+feed.length);
     return out;
   }
-  async function btPrintText(txt){
+  function btPrintText(txt){
     if(!navigator.bluetooth){ toast("Bluetooth tidak didukung browser ini (pakai Chrome Android)"); return; }
-    try{
-      toast("Pilih printer Bluetooth...");
-      var dev=await navigator.bluetooth.requestDevice({acceptAllDevices:true,optionalServices:[0xFF00,0xFFE0,'49535343-fe7d-4ae5-8fa9-9fafd205e455','0000ff00-0000-1000-8000-00805f9b34fb','000018f0-0000-1000-8000-00805f9b34fb']});
-      var srv=null, chars=[];
-      var svcs=await dev.gatt.connect().then(function(s){return s;}).catch(function(){return null;});
-      var gatt=dev.gatt.connected?dev.gatt:await dev.gatt.connect();
-      var services=await gatt.getPrimaryServices();
-      for(var i=0;i<services.length;i++){ try{ var chs=await services[i].getCharacteristics(); chs.forEach(function(c){ if(c.properties.write||c.properties.writeWithoutResponse) chars.push(c); }); }catch(e){} }
-      if(!chars.length){ toast("Karakteristik tulis tidak ketemu di "+dev.name); return; }
-      var data=escBytes(txt);
-      var CH=256;
-      for(var o=0;o<data.length;o+=CH){ var sl=data.slice(o,o+CH); var ok=false,err=null;
-        for(var k=0;k<chars.length&&!ok;k++){ try{ if(chars[k].properties.writeWithoutResponse) await chars[k].writeValueWithoutResponse(sl); else await chars[k].writeValue(sl); ok=true; }catch(e){ err=e; } }
-        if(!ok){ toast("Gagal tulis ke printer"); return; }
-        await new Promise(function(r){setTimeout(r,80);});
-      }
-      toast("Terkirim ke printer!");
-    }catch(e){ if(e&&e.name!=="NotFoundError") toast("BT batal/gagal: "+e); }
+    toast("Pilih printer Bluetooth...");
+    navigator.bluetooth.requestDevice({acceptAllDevices:true,optionalServices:[0xFF00,0xFFE0,'49535343-fe7d-4ae5-8fa9-9fafd205e455','0000ff00-0000-1000-8000-00805f9b34fb','000018f0-0000-1000-8000-00805f9b34fb']}).then(function(dev){
+      return dev.gatt.connect().then(function(){ return dev; },function(){ return dev.gatt.connect().then(function(){ return dev; }); });
+    }).then(function(dev){
+      var gatt=dev.gatt;
+      return gatt.getPrimaryServices().then(function(services){
+        var chain=Promise.resolve(), chars=[];
+        services.forEach(function(sv){ chain=chain.then(function(){ return services; }).then(function(){ return sv.getCharacteristics().then(function(chs){ chs.forEach(function(c){ if(c.properties.write||c.properties.writeWithoutResponse) chars.push(c); }); },function(){}); }); });
+        return chain.then(function(){ return {dev:dev,chars:chars}; });
+      });
+    }).then(function(r){
+      if(!r.chars.length){ toast("Karakteristik tulis tidak ketemu di "+r.dev.name); return; }
+      var data=escBytes(txt), CH=256, o=0;
+      var step=function(){
+        if(o>=data.length){ toast("Terkirim ke printer!"); return; }
+        var sl=data.slice(o,o+CH); o+=CH;
+        var k=0;
+        var tryChar=function(){
+          if(k>=r.chars.length){ toast("Gagal tulis ke printer"); return; }
+          var c=r.chars[k++];
+          var w=c.properties.writeWithoutResponse?c.writeValueWithoutResponse(sl):c.writeValue(sl);
+          w.then(function(){ setTimeout(step,80); },tryChar);
+        };
+        tryChar();
+      };
+      step();
+    }).catch(function(e){ if(e&&e.name!=="NotFoundError") toast("BT batal/gagal: "+e); });
   }
   document.getElementById("btPrintBtn").addEventListener("click",function(){ if(lastTr)btPrintText(receiptText(lastTr)); });
   document.getElementById("btTestBtn").addEventListener("click",function(){ btPrintText(state.settings.storeName+"\nTES PRINTER KASIRKU\n"+new Date().toLocaleString("id-ID")+"\n"); });
@@ -892,21 +903,31 @@
 
   // scanner
   var scanStream=null, scanning=false;
-  document.getElementById("scanBtn").addEventListener("click",async function(){
+  document.getElementById("scanBtn").addEventListener("click",function(){
     document.getElementById("scanModalBg").hidden=false;
     document.getElementById("scanManualInput").value="";
     if(!("BarcodeDetector" in window)){ document.getElementById("scanInfoEl").textContent="Browser tidak dukung scan otomatis — ketik barcode manual."; return; }
-    try{
-      scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
-      var v=document.getElementById("scanVideo"); v.srcObject=scanStream; await v.play();
-      var det=new BarcodeDetector({formats:["ean_13","ean_8","code_128","code_39","qr_code","upc_a","upc_e"]});
-      scanning=true; document.getElementById("scanInfoEl").textContent="Mengarahkan...";
-      var last="";
-      while(scanning&&!document.getElementById("scanModalBg").hidden){
-        try{ var codes=await det.detect(v); if(codes.length){ var val=codes[0].rawValue; if(val!==last){ last=val; onScan(val); } } }catch(e){}
-        await new Promise(function(r){setTimeout(r,400);});
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ document.getElementById("scanInfoEl").textContent="Kamera tidak tersedia — ketik manual."; return; }
+    navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}}).then(function(stream){
+      scanStream=stream;
+      var v=document.getElementById("scanVideo"); v.srcObject=scanStream;
+      var played=v.play(); if(played&&played.then) played.then(startDetect,startDetect); else startDetect();
+      function startDetect(){
+        var det;
+        try{ det=new BarcodeDetector({formats:["ean_13","ean_8","code_128","code_39","qr_code","upc_a","upc_e"]}); }
+        catch(e){ document.getElementById("scanInfoEl").textContent="Scan otomatis gagal — ketik manual."; return; }
+        scanning=true; document.getElementById("scanInfoEl").textContent="Mengarahkan...";
+        var last="";
+        var loop=function(){
+          if(!scanning||document.getElementById("scanModalBg").hidden) return;
+          det.detect(v).then(function(codes){
+            if(codes&&codes.length){ var val=codes[0].rawValue; if(val!==last){ last=val; onScan(val); } }
+            setTimeout(loop,400);
+          },function(){ setTimeout(loop,400); });
+        };
+        loop();
       }
-    }catch(e){ document.getElementById("scanInfoEl").textContent="Kamera ditolak / tidak tersedia — ketik manual."; }
+    },function(){ document.getElementById("scanInfoEl").textContent="Kamera ditolak / tidak tersedia — ketik manual."; });
   });
   function onScan(code){
     document.getElementById("scanInfoEl").textContent="Terdeteksi: "+code;
