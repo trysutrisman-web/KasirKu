@@ -1,10 +1,11 @@
 <!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>KasirKu</title></head><body><div id="appCtn">
+  <div id="jsWarnEl" style="background: rgb(254, 226, 226); color: rgb(153, 27, 27); padding: 10px 14px; font-weight: 700; font-size: 13px; display: none;">JavaScript tidak jalan — centang Enable JavaScript di WebViewer, lalu tutup &amp; buka ulang aplikasi.</div>
   <div class="topBar">
     <div class="topBarRow">
       <div class="logoBox">K</div>
       <div>
         <div class="storeName" id="storeNameEl">KasirKu</div>
-        <div class="storeSub"><span id="clockEl">16:55 • 8 Okt</span> • Offline • v2.0</div>
+        <div class="storeSub"><span id="clockEl">17:04 • 8 Okt</span> • Offline • v2.0</div>
       </div>
       <div class="topActions">
         <button class="iconBtn" id="themeBtn" title="Mode gelap/terang">🌙</button>
@@ -310,7 +311,7 @@
       </div>
     </div>
 
-    <div class="footNote">Offline di HP ini • v2.0 ala Eco POS • Hutang, antrian, barcode, BT print</div>
+    <div class="footNote">Offline di HP ini • v2.1 ala Eco POS • Hutang, antrian, barcode, BT print</div>
   </div>
 </div><style>
   body { text-align:left; margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,Inter,Arial,sans-serif; background:#f1f5f9; color:#0f172a; }
@@ -421,6 +422,7 @@
 (function(){
   if(!String.prototype.padStart){ String.prototype.padStart=function(t,p){ t=Math.floor(t)||0; if(this.length>=t)return String(this); p=String(p==null?" ":p); var s=""; while(s.length<t-this.length)s+=p; return s.slice(0,t-this.length)+String(this); }; }
   if(!Array.from){ Array.from=function(o){ return Array.prototype.slice.call(o); }; }
+  var jb=document.getElementById("jsWarnEl"); if(jb) jb.style.display="none";
   var LS2 = "kasirku_data_v2", LS1 = "kasirku_data_v1";
   var state = null;
   var payMethod = "Tunai", payMode = "lunas";
